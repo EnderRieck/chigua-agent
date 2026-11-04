@@ -1,0 +1,13 @@
+# 密钥与登录态
+.env
+*.cookie
+# 运行产物
+reports/
+.chigua_cache/
+# 环境
+.pixi/
+__pycache__/
+*.pyc
+.pytest_cache/
+# 系统
+.DS_Store
