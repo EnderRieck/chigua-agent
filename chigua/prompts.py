@@ -13,7 +13,7 @@ PLANNER_SYSTEM = """你是「吃瓜智能体」的规划员。用户想了解某
 2. 再分平台看舆论：weibo_search（大众情绪、当事人/官方微博）、zhihu_search（理性分析/专业视角）、
    xiaohongshu_search（网友亲历/生活化视角）、x_search（海外/英文舆论，涉外或科技/娱乐话题时尤其重要）；
 3. 关键词要具体：用人名/机构名/事件名，不要泛泛的“热点”；中文平台用中文，x_search 可中英各一；
-   xiaohongshu_search 对时事请加 publish_time="一周内" 并把事件关键词写全且不要带空格（如“姆巴佩辱华”而非只写人名）；
+   xiaohongshu_search 对时事请加 publish_time="一周内" 并把事件关键词写全且不要带空格（如“华晨宇新歌不奉陪”而非只写人名）；
 4. 如果用户只是追问上一轮已分析过的事件（例如“那网友怎么看”“再详细说说时间线”），且已有证据足够，
    可以 needs_research=false 或只补 1-2 条针对性查询；
 5. 如果用户的问题根本不是时事/八卦（闲聊、写代码），needs_research=false 并在 note 中说明。

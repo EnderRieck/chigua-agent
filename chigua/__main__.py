@@ -202,7 +202,7 @@ def cmd_hot(args: argparse.Namespace) -> None:
 def cmd_chat(args: argparse.Namespace) -> None:
     guide = (
         f"[bold]🍉 吃瓜智能体 v{__version__}[/]  [dim]模型 {settings.xai_model}[/]\n\n"
-        "直接输入想吃的瓜，例如：[italic]最近姆巴佩那事是怎么回事[/]\n"
+        "直接输入想吃的瓜，例如：[italic]华晨宇新歌是怎么回事[/]\n"
         "分析完可以继续追问，例如：[italic]知乎那边怎么看[/]\n\n"
         "[cyan]/hot[/]      看微博热搜 + 知乎热榜     [cyan]/dig W3[/]   深挖榜单第 3 条（Z5 为知乎第 5 条）\n"
         "[cyan]/sources[/]  列出本轮全部证据与链接    [cyan]/save[/]     把报告保存到 reports/\n"
