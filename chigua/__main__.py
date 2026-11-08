@@ -97,6 +97,9 @@ class ConsoleUI:
             self.buffer += payload
             self._ensure_live()
             self.live.update(self._render())  # type: ignore[union-attr]
+        elif kind == "retry":
+            self._stop_live()
+            console.print(f"  [yellow]↻ {payload}[/]")
         elif kind == "tool_round":
             self._stop_live()
             note = (payload.get("note") or "").strip()

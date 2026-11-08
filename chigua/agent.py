@@ -176,6 +176,9 @@ class ChiguaAgent:
             for kind, payload in self.llm.stream(messages, tools=tools):
                 if kind == "text":
                     emit("text", payload)
+                elif kind == "retry":
+                    emit("text_reset", None)
+                    emit("retry", payload)
                 else:
                     text, calls = payload["text"], payload["tool_calls"]
             if not calls:

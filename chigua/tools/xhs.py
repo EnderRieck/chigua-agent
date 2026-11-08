@@ -2,6 +2,7 @@
 未配置时走 DeepSeek site:xiaohongshu.com 兜底。"""
 from __future__ import annotations
 
+import asyncio
 import json
 import re
 from typing import Any
@@ -25,12 +26,23 @@ def _extract_json(text: str) -> Any:
     return None
 
 
+def _unwrap(exc: BaseException) -> BaseException:
+    """anyio 会把底层异常包成 ExceptionGroup，取最里面那个用于提示。"""
+    subs = getattr(exc, "exceptions", None)
+    return _unwrap(subs[0]) if subs else exc
+
+
 async def _mcp_call(tool: str, args: dict[str, Any]) -> Any:
     from .mcp_client import open_mcp_session, text_of
 
-    async with open_mcp_session(settings.xhs_mcp_url, settings.xhs_mcp_token,
-                                timeout=settings.request_timeout * 3) as session:
-        result = await session.call_tool(tool, args)
+    try:
+        async with open_mcp_session(settings.xhs_mcp_url, settings.xhs_mcp_token, timeout=65) as session:
+            result = await asyncio.wait_for(session.call_tool(tool, args), timeout=65)
+    except BaseException as exc:  # noqa: BLE001
+        inner = _unwrap(exc)
+        if isinstance(inner, asyncio.TimeoutError):
+            raise RuntimeError("小红书搜索页 65s 内未返回") from None
+        raise RuntimeError(f"{type(inner).__name__}: {str(inner)[:80]}") from None
     joined = text_of(result)
     if getattr(result, "isError", False) or getattr(result, "is_error", False):
         raise RuntimeError(joined or "MCP 返回错误")
@@ -148,6 +160,7 @@ TOOLS = [
             "required": ["keyword"],
         },
         func=xiaohongshu_search,
+        timeout=150,   # 两次 MCP 尝试（各 ≤65s）+ DeepSeek 兜底
     ),
     ToolSpec(
         name="xiaohongshu_note_detail",

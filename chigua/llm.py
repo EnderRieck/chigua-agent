@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import re
+import time
 from typing import Any, Iterator
 
 from openai import OpenAI
@@ -35,6 +36,7 @@ class LLM:
         self.model = model or settings.xai_model
         self.client = OpenAI(api_key=settings.xai_api_key, base_url=settings.xai_base_url,
                              timeout=settings.request_timeout * 3, max_retries=2)
+        self._stream_ok = True   # 流式连接一旦被中转站掐断，本会话后续走非流式
 
     # ---------- 普通对话 ----------
     def complete(self, messages: list[dict[str, Any]], temperature: float = 0.3, **kw: Any) -> str:
@@ -52,13 +54,40 @@ class LLM:
     # ---------- 流式 + 工具调用 ----------
     def stream(self, messages: list[dict[str, Any]], tools: list[dict[str, Any]] | None = None,
                temperature: float = 0.3) -> Iterator[tuple[str, Any]]:
-        """逐段产出 ("text", delta)，最后产出 ("done", {"text":..., "tool_calls":[...]}）。"""
+        """逐段产出 ("text", delta)，最后产出 ("done", {"text":..., "tool_calls":[...]}）。
+
+        连接类错误（中转站断流、超时）自动重试：前两次仍用流式，第三次改用非流式一次性拿结果。
+        已经吐出去的文本片段无法撤回，重试前会先产出 ("retry", 说明) 让界面清屏。
+        """
+        from openai import APIConnectionError, APITimeoutError, InternalServerError
+
+        attempts = 3
+        for attempt in range(1, attempts + 1):
+            # 流式连接在本会话里断过一次之后就不再尝试流式：中转站对长时间无输出的流式连接会掐断，
+            # 非流式一次性返回反而稳定（实测 9~13s）
+            use_stream = settings.llm_stream and self._stream_ok and attempt < attempts
+            try:
+                yield from self._stream_once(messages, tools, temperature, use_stream)
+                return
+            except (APIConnectionError, APITimeoutError, InternalServerError) as exc:
+                if use_stream and self._stream_ok:
+                    self._stream_ok = False
+                    yield ("retry", f"流式连接被中断（{type(exc).__name__}），本会话后续改用非流式输出")
+                elif attempt == attempts:
+                    raise
+                else:
+                    wait = 3 * attempt
+                    yield ("retry", f"模型连接中断（{type(exc).__name__}），{wait}s 后第 {attempt + 1} 次重试")
+                    time.sleep(wait)
+
+    def _stream_once(self, messages: list[dict[str, Any]], tools: list[dict[str, Any]] | None,
+                     temperature: float, use_stream: bool) -> Iterator[tuple[str, Any]]:
         kwargs: dict[str, Any] = {"model": self.model, "messages": messages, "temperature": temperature}
         if tools:
             kwargs["tools"] = tools
             kwargs["tool_choice"] = "auto"
 
-        if not settings.llm_stream:
+        if not use_stream:
             resp = self.client.chat.completions.create(**kwargs)
             msg = resp.choices[0].message
             text = msg.content or ""
