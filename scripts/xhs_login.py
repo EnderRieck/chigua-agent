@@ -64,5 +64,31 @@ async def main() -> int:
             return 1
 
 
+def _root_causes(exc: BaseException) -> list[BaseException]:
+    """把 anyio 的 ExceptionGroup 层层拆开，取出真正的底层异常。"""
+    subs = getattr(exc, "exceptions", None)
+    if not subs:
+        return [exc]
+    out: list[BaseException] = []
+    for e in subs:
+        out.extend(_root_causes(e))
+    return out
+
+
 if __name__ == "__main__":
-    sys.exit(asyncio.run(main()))
+    try:
+        sys.exit(asyncio.run(main()))
+    except SystemExit:
+        raise
+    except KeyboardInterrupt:
+        sys.exit(130)
+    except BaseException as exc:  # noqa: BLE001
+        causes = _root_causes(exc)
+        names = {type(c).__name__ for c in causes}
+        print("\n❌ 连接小红书 MCP 失败：", "; ".join(f"{type(c).__name__}: {c}" for c in causes)[:300])
+        if names & {"ConnectError", "ConnectionRefusedError", "OSError"}:
+            print("   → 服务没有启动。先在另一个终端运行：cd ~/xhs-mcp && ./xiaohongshu-mcp-darwin-arm64 -headless=false")
+        elif "MCPError" in names:
+            print("   → 服务在线但拒绝了握手，通常是服务刚启动还没就绪、或者端口被别的程序占用。"
+                  "等几秒重试；仍失败就重启服务（Ctrl-C 后重新运行启动命令）。")
+        sys.exit(1)
