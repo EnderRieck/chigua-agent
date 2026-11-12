@@ -39,7 +39,7 @@ class Settings:
     xai_model: str = field(default_factory=lambda: _env("XAI_MODEL", "grok-4.3"))
     llm_stream: bool = field(default_factory=lambda: _env("LLM_STREAM", "1") != "0")
     x_search_mode: str = field(default_factory=lambda: _env("X_SEARCH_MODE", "auto").lower())
-    x_search_timeout: int = field(default_factory=lambda: _env_int("X_SEARCH_TIMEOUT", 75))
+    x_search_timeout: int = field(default_factory=lambda: _env_int("X_SEARCH_TIMEOUT", 120))
 
     # DeepSeek 搜索
     deepseek_api_key: str = field(default_factory=lambda: _env("DEEPSEEK_API_KEY"))

@@ -75,26 +75,44 @@ def _since(days: int) -> str:
 
 
 def _via_responses(query: str, count: int, days: int) -> ToolResult:
+    import time as _time
+    from openai import APIConnectionError, APITimeoutError
+
     client = _client()
-    resp = client.responses.create(
-        model=settings.xai_model,
-        input=[{"role": "user", "content": _PROMPT.format(query=query, count=count, since=_since(days))}],
-        tools=[{"type": "x_search"}],
-    )
+    resp = None
+    for attempt in range(3):   # 中转站的 /responses 偶发连接中断，短暂重试
+        try:
+            resp = client.responses.create(
+                model=settings.xai_model,
+                input=[{"role": "user", "content": _PROMPT.format(query=query, count=count, since=_since(days))}],
+                tools=[{"type": "x_search"}],
+            )
+            break
+        except APITimeoutError:
+            raise
+        except APIConnectionError:
+            if attempt == 2:
+                raise
+            _time.sleep(2 * (attempt + 1))
     citations: list[str] = []
     used_tool = False
     for item in getattr(resp, "output", []) or []:
         itype = getattr(item, "type", "")
-        if "x_search" in itype or "search" in itype:
+        # 官方返回 x_search_call；部分中转站转成 custom_tool_call / tool_call，都算真的调用了工具
+        if "search" in itype or "tool_call" in itype:
             used_tool = True
         for part in getattr(item, "content", []) or []:
             for ann in getattr(part, "annotations", []) or []:
                 url = getattr(ann, "url", None)
                 if url:
                     citations.append(url)
+    text = resp.output_text or ""
+    if not citations:
+        # 中转站可能丢掉 annotations，退而从正文里抠 x.com 的帖子链接作为引用
+        citations = list(dict.fromkeys(re.findall(r"https?://(?:x|twitter)\.com/[A-Za-z0-9_]+/status/\d+", text)))
     if not used_tool and not citations:
         raise RuntimeError("接口未执行 x_search（无工具调用与引用）")
-    return ToolResult(platform="x", items=parse_posts(resp.output_text or "", citations)[:count],
+    return ToolResult(platform="x", items=parse_posts(text, citations)[:count],
                       note="来自 xAI x_search（Responses API）")
 
 
@@ -129,6 +147,9 @@ async def x_search(query: str, count: int = 10, days: int = 7) -> ToolResult:
             if m == "deepseek":
                 reason = "；".join(errors) or "X_SEARCH_MODE=deepseek"
                 res = await site_search("x.com", query, platform="x", count=count, reason=reason)
+                # DeepSeek 的 site: 是子串匹配，会混进 box.com 之类，只留真正的 x.com / twitter.com
+                res.items = [it for it in res.items
+                             if re.match(r"https?://(?:[\w-]+\.)?(?:x|twitter)\.com/", it.get("url", ""))]
                 if res.items:
                     return res
                 # 搜索引擎对 x.com 索引很少，再退一步：找转述 X/推特舆论的新闻与长文
